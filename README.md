@@ -6,7 +6,7 @@ The `power_query_extractor.py` script is a powerful Python utility designed for 
 
 - **Supports Multiple Excel Formats**: Works seamlessly with .xlsx, .xlsm, and .xlsb file formats.
 - **Efficient Extraction and Decoding**: Automatically navigates through Excel's internal ZIP and XML structures to extract and decode Power Query M code, specifically targeting content within `Formulas/Section1.m`.
-- **Command-Line Interface**: Designed for ease of use, enabling users to quickly extract Power Query M code through a simple command-line instruction.
+- **Open File Dialog**: Select the Excel workbook to inspect from a graphical file picker.
 
 ## Getting Started
 
@@ -21,13 +21,21 @@ git clone https://github.com/jamesdesantiago/PowerQueryViewer.git
 
 
 2. Navigate to the cloned repository directory.
-3. There are no external dependencies required to run the script as it uses standard Python libraries.
+3. Install the required XML parser:
+
+   ```powershell
+   python -m pip install lxml
+   ```
 
 ## Usage
 
-Run the script from the command line by navigating to the directory containing `power_query_extractor.py` and executing:
+Run the script from a terminal:
 
-Replace `excel_path` with the actual path to the Excel file you wish to extract Power Query M code from.
+```powershell
+python power_query_extractor.py
+```
+
+Choose an `.xlsx`, `.xlsm`, or `.xlsb` workbook in the file dialog. Each extracted query is saved as a `.pq` file named after the query in a new folder named after the workbook, next to the selected workbook. The `.pq` file contains only the query expression (for example, `let ... in ...`), without the `section Section1;` header or `shared QueryName =` declaration. For example, a query named `Monthly Sales` in `Sales.xlsx` is saved as `Sales/Monthly Sales.pq`. If that file already exists, it is overwritten with the newly extracted query. The console displays a short summary with the source workbook name, number of queries, and names of the extracted `.pq` files. XML files that cannot be parsed are skipped without displaying individual warnings. Closing the dialog without selecting a file cancels the operation.
 
 ## Contributing
 
@@ -48,4 +56,3 @@ Distributed under the Apache 2.0 License. See `LICENSE` for more information.
 James De Santiago - james.desantiago@outlook.com
 
 Project Link: [https://github.com/jamesdesantiago/PowerQueryViewer](https://github.com/jamesdesantiago/PowerQueryViewer)
-
