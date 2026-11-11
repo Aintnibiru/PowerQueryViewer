@@ -7,6 +7,7 @@ The `power_query_extractor.py` script is a Python utility designed for data anal
 - **Supports Multiple Excel Formats**: Works seamlessly with `.xlsx`, `.xlsm`, and `.xlsb` file formats.
 - **Efficient Extraction and Decoding**: Automatically navigates through Excel's internal ZIP and XML structures to extract and decode Power Query M code from `Formulas/Section1.m`.
 - **Full Syntax Support**: Correctly handles Power Query parameters (`[IsParameterQuery=true]`), member attributes, quoted identifiers (`#"..."`), comments, and Unicode query names.
+- **Pre-Extraction Preview & Confirmation**: Displays the complete list of discovered queries and asks for user confirmation before writing files.
 - **CLI & GUI Modes**: Run with a graphical file picker dialog or pass file paths directly via command-line arguments for automated pipelines.
 - **Zero-Dependency Ready**: Operates with Python's standard library out of the box, with optional `lxml` support for faster XML processing.
 - **Safe Output Sanitization**: Cross-platform file naming with automatic collision resolution to avoid overwriting queries with similar or colliding names.
@@ -47,10 +48,22 @@ Pass the Excel file directly:
 python power_query_extractor.py "path/to/workbook.xlsx"
 ```
 
+Preview queries without extracting (`--list`):
+
+```powershell
+python power_query_extractor.py "path/to/workbook.xlsx" --list
+```
+
 Specify a custom output directory:
 
 ```powershell
 python power_query_extractor.py "path/to/workbook.xlsx" -o "path/to/output_dir"
+```
+
+Extract immediately without confirmation prompt (`-y` / `--yes`):
+
+```powershell
+python power_query_extractor.py "path/to/workbook.xlsx" -y
 ```
 
 ### Output

@@ -167,35 +167,58 @@ def _split_query_definitions(section_content: str) -> list[tuple[str, str]]:
 
 
 def _extract_mashup_package(decoded_content: bytes) -> bytes | None:
-    """Extract the embedded Package ZIP bytes from decoded DataMashup content."""
-    # DataMashup format specifies a 4-byte little-endian PackageLength at offset 0
-    if len(decoded_content) >= 8:
-        pkg_len = int.from_bytes(decoded_content[:4], "little")
-        if (
-            decoded_content[4:8] == b"PK\x03\x04"
-            and len(decoded_content) >= 4 + pkg_len
-        ):
-            return decoded_content[4 : 4 + pkg_len]
+    """Extract the embedded Package ZIP bytes from decoded DataMashup content.
 
-    # Fallback: scan for standard ZIP signatures
+    DataMashup packages contain multiple concatenated parts (Package, Permissions,
+    Metadata). The Package is a ZIP file whose length prefix is located immediately
+    before the 'PK\\x03\\x04' signature (either at offset 0 or offset 4).
+    """
     zip_start = decoded_content.find(b"PK\x03\x04")
     if zip_start == -1:
         return None
 
-    # Find the End of Central Directory (EOCD) signature
-    zip_end = decoded_content.rfind(b"PK\x05\x06", zip_start)
-    if zip_end == -1:
-        return None
-
-    # EOCD is 22 bytes + comment length (2 bytes at offset 20)
-    comment_len = 0
-    if len(decoded_content) >= zip_end + 22:
-        comment_len = int.from_bytes(
-            decoded_content[zip_end + 20 : zip_end + 22], "little"
+    # 1. Check if the 4 bytes immediately preceding zip_start specify the package length
+    if zip_start >= 4:
+        pkg_len = int.from_bytes(
+            decoded_content[zip_start - 4 : zip_start], "little"
         )
+        if pkg_len > 0 and len(decoded_content) >= zip_start + pkg_len:
+            candidate = decoded_content[zip_start : zip_start + pkg_len]
+            try:
+                with zipfile.ZipFile(BytesIO(candidate)) as zf:
+                    if "Formulas/Section1.m" in zf.namelist():
+                        return candidate
+            except zipfile.BadZipFile:
+                pass
 
-    end_offset = zip_end + 22 + comment_len
-    return decoded_content[zip_start:end_offset]
+    # 2. Iterate through EOCD signatures from first to last to find the package containing Section1.m
+    first_valid_zip = None
+    search_pos = zip_start
+    while True:
+        eocd_pos = decoded_content.find(b"PK\x05\x06", search_pos)
+        if eocd_pos == -1:
+            break
+
+        comment_len = 0
+        if len(decoded_content) >= eocd_pos + 22:
+            comment_len = int.from_bytes(
+                decoded_content[eocd_pos + 20 : eocd_pos + 22], "little"
+            )
+
+        end_offset = eocd_pos + 22 + comment_len
+        candidate = decoded_content[zip_start:end_offset]
+        try:
+            with zipfile.ZipFile(BytesIO(candidate)) as zf:
+                if "Formulas/Section1.m" in zf.namelist():
+                    return candidate
+                if first_valid_zip is None:
+                    first_valid_zip = candidate
+        except zipfile.BadZipFile:
+            pass
+
+        search_pos = eocd_pos + 4
+
+    return first_valid_zip
 
 
 def _extract_mashup_base64_from_xml(xml_bytes: bytes) -> str | None:
@@ -345,6 +368,23 @@ def save_power_query_files(
     return saved_files
 
 
+def ask_confirmation(prompt_text: str) -> bool:
+    """Ask for user confirmation via terminal input or GUI dialog."""
+    if sys.stdin is not None:
+        try:
+            response = input(prompt_text).strip().lower()
+            return response in {"", "y", "ya", "yes"}
+        except (EOFError, KeyboardInterrupt):
+            return False
+
+    try:
+        from tkinter import messagebox
+
+        return bool(messagebox.askyesno("Konfirmasi Ekstraksi", prompt_text))
+    except (ImportError, RuntimeError, OSError):
+        return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Extract and decode Power Query M code from Excel workbooks (.xlsx, .xlsm, .xlsb)."
@@ -360,6 +400,18 @@ def main() -> None:
         "--output-dir",
         default=None,
         help="Directory to save extracted .pq files. Defaults to a folder named after the workbook.",
+    )
+    parser.add_argument(
+        "-l",
+        "--list",
+        action="store_true",
+        help="List queries found in the workbook without extracting them to files.",
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Skip confirmation prompt and extract immediately.",
     )
 
     args = parser.parse_args()
@@ -382,22 +434,40 @@ def main() -> None:
         print(f"Error saat mengekstrak query: {exc}", file=sys.stderr)
         sys.exit(1)
 
+    print(f"File sumber: {file_path.name}")
+    if not queries:
+        print("- Tidak ada query yang ditemukan.")
+        return
+
+    print(f"\nDaftar query yang ditemukan ({len(queries)}):")
+    for idx, (query_name, _) in enumerate(queries, start=1):
+        print(f"  {idx}. {query_name}")
+    print()
+
+    if args.list:
+        return
+
     if args.output_dir:
         output_dir = Path(args.output_dir)
     else:
         output_dir = file_path.parent / file_path.stem
 
+    print(f"Folder tujuan: {output_dir}")
+    if not args.yes:
+        prompt = (
+            f"Lanjutkan ekstraksi {len(queries)} query ke folder tujuan? [Y/n]: "
+        )
+        if not ask_confirmation(prompt):
+            print("Ekstraksi dibatalkan oleh pengguna.")
+            return
+
+    print("\nMengekstrak query...")
     saved_files = save_power_query_files(queries, output_dir)
 
-    print(f"File sumber: {file_path.name}")
-    print(f"Folder tujuan: {output_dir}")
-    print(f"Jumlah query: {len(saved_files)}")
+    print(f"Jumlah file tersimpan: {len(saved_files)}")
     print("File hasil ekstrak:")
-    if saved_files:
-        for saved in saved_files:
-            print(f"- {saved.name}")
-    else:
-        print("- Tidak ada query yang ditemukan.")
+    for saved in saved_files:
+        print(f"  - {saved.name}")
 
 
 if __name__ == "__main__":
