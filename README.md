@@ -1,41 +1,69 @@
 # PowerQueryViewer
 
-The `power_query_extractor.py` script is a powerful Python utility designed for data analysts, developers, and anyone involved in data transformation and analysis using Excel's Power Query feature. It automates the extraction and decoding of Power Query M code from Excel files (.xlsx, .xlsm, .xlsb), bypassing the need to manually open and navigate through Excel documents.
+The `power_query_extractor.py` script is a Python utility designed for data analysts, developers, and anyone involved in data transformation and analysis using Excel's Power Query feature. It automates the extraction and decoding of Power Query M code from Excel files (.xlsx, .xlsm, .xlsb), bypassing the need to manually open and navigate through Excel documents.
 
 ## Features
 
-- **Supports Multiple Excel Formats**: Works seamlessly with .xlsx, .xlsm, and .xlsb file formats.
-- **Efficient Extraction and Decoding**: Automatically navigates through Excel's internal ZIP and XML structures to extract and decode Power Query M code, specifically targeting content within `Formulas/Section1.m`.
-- **Open File Dialog**: Select the Excel workbook to inspect from a graphical file picker.
+- **Supports Multiple Excel Formats**: Works seamlessly with `.xlsx`, `.xlsm`, and `.xlsb` file formats.
+- **Efficient Extraction and Decoding**: Automatically navigates through Excel's internal ZIP and XML structures to extract and decode Power Query M code from `Formulas/Section1.m`.
+- **Full Syntax Support**: Correctly handles Power Query parameters (`[IsParameterQuery=true]`), member attributes, quoted identifiers (`#"..."`), comments, and Unicode query names.
+- **CLI & GUI Modes**: Run with a graphical file picker dialog or pass file paths directly via command-line arguments for automated pipelines.
+- **Zero-Dependency Ready**: Operates with Python's standard library out of the box, with optional `lxml` support for faster XML processing.
+- **Safe Output Sanitization**: Cross-platform file naming with automatic collision resolution to avoid overwriting queries with similar or colliding names.
 
 ## Getting Started
 
 ### Prerequisites
 
-Ensure you have Python 3.x installed on your system. If you don't have Python installed, you can download it from the [official Python website](https://www.python.org/downloads/).
+Python 3.10 or higher.
 
 ### Installation
 
 1. Clone the repository to your local machine:
-git clone https://github.com/jamesdesantiago/PowerQueryViewer.git
-
-
+   ```bash
+   git clone https://github.com/jamesdesantiago/PowerQueryViewer.git
+   ```
 2. Navigate to the cloned repository directory.
-3. Install the required XML parser:
-
+3. *(Optional)* Install `lxml` for accelerated XML parsing:
    ```powershell
    python -m pip install lxml
    ```
 
 ## Usage
 
-Run the script from a terminal:
+### Interactive GUI Mode
+
+Run the script without arguments to open a file selection dialog:
 
 ```powershell
 python power_query_extractor.py
 ```
 
-Choose an `.xlsx`, `.xlsm`, or `.xlsb` workbook in the file dialog. Each extracted query is saved as a `.pq` file named after the query in a new folder named after the workbook, next to the selected workbook. The `.pq` file contains only the query expression (for example, `let ... in ...`), without the `section Section1;` header or `shared QueryName =` declaration. For example, a query named `Monthly Sales` in `Sales.xlsx` is saved as `Sales/Monthly Sales.pq`. If that file already exists, it is overwritten with the newly extracted query. The console displays a short summary with the source workbook name, number of queries, and names of the extracted `.pq` files. XML files that cannot be parsed are skipped without displaying individual warnings. Closing the dialog without selecting a file cancels the operation.
+### Command-Line (CLI) Mode
+
+Pass the Excel file directly:
+
+```powershell
+python power_query_extractor.py "path/to/workbook.xlsx"
+```
+
+Specify a custom output directory:
+
+```powershell
+python power_query_extractor.py "path/to/workbook.xlsx" -o "path/to/output_dir"
+```
+
+### Output
+
+Each extracted query is saved as an individual `.pq` file containing the query expression (such as `let ... in ...`). By default, files are saved in a subfolder named after the workbook in the same directory as the source file.
+
+## Testing
+
+Run the automated test suite with standard Python:
+
+```powershell
+python -m unittest -v test_power_query_extractor.py
+```
 
 ## Contributing
 
