@@ -4,15 +4,15 @@ The `power_query_extractor.py` script is a powerful Python utility designed for 
 
 ## Features
 
-- **Supports Multiple Excel Formats**: Works seamlessly with .xlsx, .xlsm, and .xlsb file formats.
-- **Efficient Extraction and Decoding**: Automatically navigates through Excel's internal ZIP and XML structures to extract and decode Power Query M code, specifically targeting content within `Formulas/Section1.m`.
-- **Command-Line Interface**: Designed for ease of use, enabling users to quickly extract Power Query M code through a simple command-line instruction.
+- **Supports Excel Workbooks**: Works with `.xlsx` and `.xlsm` files. Legacy binary `.xlsb` workbooks are rejected with a clear error, because they use the BIFF12 binary format and are not ZIP containers.
+- **Efficient Extraction and Decoding**: Automatically navigates through Excel's internal ZIP and XML structures to extract and decode Power Query M code, targeting every `Formulas/*.m` part (usually `Formulas/Section1.m`).
+- **Command-Line Interface**: Designed for ease of use, enabling users to quickly extract Power Query M code through a simple command-line instruction, printed to stdout or written to a file.
 
 ## Getting Started
 
 ### Prerequisites
 
-Ensure you have Python 3.x installed on your system. If you don't have Python installed, you can download it from the [official Python website](https://www.python.org/downloads/).
+Ensure you have Python 3.9 or newer installed on your system. If you don't have Python installed, you can download it from the [official Python website](https://www.python.org/downloads/).
 
 ### Installation
 
@@ -21,13 +21,30 @@ git clone https://github.com/jamesdesantiago/PowerQueryViewer.git
 
 
 2. Navigate to the cloned repository directory.
-3. There are no external dependencies required to run the script as it uses standard Python libraries.
+3. Create the environment and install dependencies:
+
+```powershell
+uv venv
+uv sync
+```
+
+`lxml` is the single external dependency required by the script; `zipfile`, `base64`, `argparse` and `io` are part of the standard library. If you do not use uv, install it with `pip install lxml`. Note that environments created by uv do not include pip, so use `uv pip install lxml` inside them.
 
 ## Usage
 
-Run the script from the command line by navigating to the directory containing `power_query_extractor.py` and executing:
+Run the script from the command line, passing the workbook you want to inspect:
 
-Replace `excel_path` with the actual path to the Excel file you wish to extract Power Query M code from.
+```powershell
+python power_query_extractor.py path\to\workbook.xlsx
+```
+
+Or, once the project is installed, use the console script:
+
+```powershell
+power-query-extractor path\to\workbook.xlsx
+```
+
+The extracted M code is printed to stdout. Pass `--output queries.m` to write it to a file instead. The exit code is `0` on success, `1` on error, and `2` when the workbook contains no Power Query queries.
 
 ## Contributing
 
