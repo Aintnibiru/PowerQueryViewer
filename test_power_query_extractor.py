@@ -290,6 +290,23 @@ in
                 self.assertIn("Mengekstrak query...", output)
                 self.assertTrue((out_dir_yes / "Param1.pq").exists())
 
+    def test_quiet_flag_suppresses_output(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            excel_path = Path(tmp_dir) / "Quiet.xlsx"
+            out_dir = Path(tmp_dir) / "out_quiet"
+            self._create_dummy_excel(excel_path)
+
+            with (
+                patch(
+                    "sys.argv",
+                    ["script", str(excel_path), "-o", str(out_dir), "-y", "-q"],
+                ),
+                patch("sys.stdout", new_callable=StringIO) as mock_stdout,
+            ):
+                main()
+                self.assertEqual(mock_stdout.getvalue(), "")
+                self.assertTrue((out_dir / "Param1.pq").exists())
+
     def test_file_validation_errors(self):
         with self.assertRaises(FileNotFoundError):
             find_power_query_files("non_existent_file.xlsx")

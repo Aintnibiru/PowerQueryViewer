@@ -457,11 +457,16 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    def info(*values: object) -> None:
+        """Print informational output unless --quiet was requested."""
+        if not args.quiet:
+            print(*values)
+
     excel_path = args.file
     if not excel_path:
         excel_path = select_excel_file()
         if not excel_path:
-            print("Ekstraksi dibatalkan: tidak ada file yang dipilih.")
+            info("Ekstraksi dibatalkan: tidak ada file yang dipilih.")
             return
 
     file_path = Path(excel_path)
@@ -475,15 +480,15 @@ def main() -> None:
         print(f"Error saat mengekstrak query: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"File sumber: {file_path.name}")
+    info(f"File sumber: {file_path.name}")
     if not queries:
-        print("- Tidak ada query yang ditemukan.")
+        info("- Tidak ada query yang ditemukan.")
         return
 
-    print(f"\nDaftar query yang ditemukan ({len(queries)}):")
+    info(f"\nDaftar query yang ditemukan ({len(queries)}):")
     for idx, (query_name, _) in enumerate(queries, start=1):
-        print(f"  {idx}. {query_name}")
-    print()
+        info(f"  {idx}. {query_name}")
+    info()
 
     if args.list:
         return
@@ -493,26 +498,26 @@ def main() -> None:
     else:
         output_dir = file_path.parent / file_path.stem
 
-    print(f"Folder tujuan: {output_dir}")
+    info(f"Folder tujuan: {output_dir}")
     if not args.yes:
         prompt = (
             f"Lanjutkan ekstraksi {len(queries)} query ke folder tujuan? [Y/n]: "
         )
         if not ask_confirmation(prompt):
-            print("Ekstraksi dibatalkan oleh pengguna.")
+            info("Ekstraksi dibatalkan oleh pengguna.")
             return
 
-    print("\nMengekstrak query...")
+    info("\nMengekstrak query...")
     try:
         saved_files = save_power_query_files(queries, output_dir, overwrite=args.overwrite)
     except FileExistsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"Jumlah file tersimpan: {len(saved_files)}")
-    print("File hasil ekstrak:")
+    info(f"Jumlah file tersimpan: {len(saved_files)}")
+    info("File hasil ekstrak:")
     for saved in saved_files:
-        print(f"  - {saved.name}")
+        info(f"  - {saved.name}")
 
 
 if __name__ == "__main__":

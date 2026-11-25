@@ -88,6 +88,12 @@ Show version (`-v` / `--version`):
 python pq_extract.py --version
 ```
 
+Suppress informational output (`-q` / `--quiet`); errors still go to stderr:
+
+```powershell
+python pq_extract.py "path/to/workbook.xlsx" -y -q
+```
+
 The exit code is `0` on success and `1` on error.
 
 ### Output
