@@ -305,6 +305,11 @@ in
             with self.assertRaises(ValueError):
                 find_power_query_files(bad_zip)
 
+            binary_workbook = Path(tmp_dir) / "legacy.xlsb"
+            binary_workbook.write_bytes(b"BIFF12")
+            with self.assertRaisesRegex(ValueError, "BIFF12"):
+                find_power_query_files(binary_workbook)
+
     def test_version_flag(self):
         with patch("sys.argv", ["script", "--version"]):
             with self.assertRaises(SystemExit) as context:

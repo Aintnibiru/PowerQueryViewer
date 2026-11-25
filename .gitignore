@@ -8,6 +8,11 @@ __pycache__/
 venv/
 ENV/
 
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
 # Output directories
 *.pq
 

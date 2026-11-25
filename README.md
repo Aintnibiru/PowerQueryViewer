@@ -1,10 +1,10 @@
 # PowerQueryViewer
 
-The `pq_extract.py` script is a Python utility designed for data analysts, developers, and anyone involved in data transformation and analysis using Excel's Power Query feature. It automates the extraction and decoding of Power Query M code from Excel files (.xlsx, .xlsm, .xlsb), bypassing the need to manually open and navigate through Excel documents.
+The `pq_extract.py` script is a Python utility designed for data analysts, developers, and anyone involved in data transformation and analysis using Excel's Power Query feature. It automates the extraction and decoding of Power Query M code from Excel files (.xlsx, .xlsm), bypassing the need to manually open and navigate through Excel documents.
 
 ## Features
 
-- **Supports Multiple Excel Formats**: Works seamlessly with `.xlsx`, `.xlsm`, and `.xlsb` file formats.
+- **Supports Excel Workbooks**: Works with `.xlsx` and `.xlsm` files. Legacy binary `.xlsb` workbooks are rejected with a clear error, because they use the BIFF12 binary format and are not ZIP containers.
 - **Efficient Extraction and Decoding**: Automatically navigates through Excel's internal ZIP and XML structures to extract and decode Power Query M code from `Formulas/Section1.m`.
 - **Full Syntax Support**: Correctly handles Power Query parameters (`[IsParameterQuery=true]`), member attributes, quoted identifiers (`#"..."`), comments, and Unicode query names.
 - **Pre-Extraction Preview & Confirmation**: Displays the complete list of discovered queries and asks for user confirmation before writing files.
@@ -25,10 +25,14 @@ Python 3.10 or higher.
    git clone https://github.com/jamesdesantiago/PowerQueryViewer.git
    ```
 2. Navigate to the cloned repository directory.
-3. *(Optional)* Install `lxml` for accelerated XML parsing:
+3. Create the environment and install dependencies:
+
    ```powershell
-   python -m pip install lxml
+   uv venv
+   uv sync
    ```
+
+`lxml` is declared in `pyproject.toml` and installed by `uv sync`; it is only an accelerator. Without it the script falls back to the standard library `xml.etree.ElementTree`, so no third-party package is strictly required. If you do not use uv, install it with `pip install lxml`. Environments created by uv do not include pip, so use `uv pip install lxml` inside them.
 
 ## Usage
 
@@ -46,6 +50,12 @@ Pass the Excel file directly:
 
 ```powershell
 python pq_extract.py "path/to/workbook.xlsx"
+```
+
+Once the project is installed, the same entry point is available as a console script:
+
+```powershell
+power-query-extractor "path/to/workbook.xlsx"
 ```
 
 Preview queries without extracting (`--list`):
@@ -77,6 +87,8 @@ Show version (`-v` / `--version`):
 ```powershell
 python pq_extract.py --version
 ```
+
+The exit code is `0` on success and `1` on error.
 
 ### Output
 

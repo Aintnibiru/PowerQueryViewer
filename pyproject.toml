@@ -1,0 +1,26 @@
+[project]
+name = "power-query-viewer"
+version = "0.1.0"
+description = "Extract and decode Power Query M code from Excel workbooks (.xlsx/.xlsm)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "James De Santiago", email = "james.desantiago@outlook.com" }]
+keywords = ["power-query", "excel", "data-mashup", "m-code", "etl"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Topic :: Office/Business :: Financial :: Spreadsheet",
+]
+dependencies = ["lxml>=5.0"]
+
+[project.scripts]
+power-query-extractor = "pq_extract:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+only-include = ["pq_extract.py"]

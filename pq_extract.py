@@ -29,7 +29,8 @@ except ImportError:
         TypeError,
     )
 
-SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm", ".xlsb"}
+SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm"}
+BINARY_WORKBOOK_EXTENSIONS = {".xlsb"}
 DATA_MASHUP_NAMESPACE = {"d": "http://schemas.microsoft.com/DataMashup"}
 WINDOWS_RESERVED_NAMES = {
     "CON",
@@ -254,7 +255,14 @@ def find_power_query_files(excel_path: str | Path) -> list[tuple[str, str]]:
     if not workbook_path.is_file():
         raise FileNotFoundError(f"File not found: {workbook_path}")
 
-    if workbook_path.suffix.lower() not in SUPPORTED_EXTENSIONS:
+    suffix = workbook_path.suffix.lower()
+    if suffix in BINARY_WORKBOOK_EXTENSIONS:
+        raise ValueError(
+            "Unsupported file format '.xlsb': .xlsb workbooks use the binary BIFF12 "
+            "format and are not ZIP containers. Save the workbook as .xlsx or .xlsm first."
+        )
+
+    if suffix not in SUPPORTED_EXTENSIONS:
         supported_formats = ", ".join(sorted(SUPPORTED_EXTENSIONS))
         raise ValueError(
             f"Unsupported file format '{workbook_path.suffix}'. Use {supported_formats}."
@@ -317,7 +325,7 @@ def select_excel_file() -> str:
             return filedialog.askopenfilename(
                 title="Select an Excel workbook",
                 filetypes=(
-                    ("Excel workbooks", "*.xlsx *.xlsm *.xlsb"),
+                    ("Excel workbooks", "*.xlsx *.xlsm"),
                     ("All files", "*.*"),
                 ),
             )
@@ -402,7 +410,7 @@ def ask_confirmation(prompt_text: str) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Extract and decode Power Query M code from Excel workbooks (.xlsx, .xlsm, .xlsb)."
+        description="Extract and decode Power Query M code from Excel workbooks (.xlsx, .xlsm)."
     )
     parser.add_argument(
         "file",
