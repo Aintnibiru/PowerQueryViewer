@@ -176,7 +176,11 @@ in
         self.assertIsNotNone(extracted)
         self.assertEqual(extracted, zip_data)
 
-    def _create_dummy_excel(self, destination: Path) -> None:
+    def _create_dummy_excel(
+        self,
+        destination: Path,
+        extra_parts: dict[str, bytes] | None = None,
+    ) -> None:
         inner_zip_buf = BytesIO()
         with zipfile.ZipFile(inner_zip_buf, "w") as inner_zf:
             m_code = (
@@ -202,6 +206,8 @@ in
 
         with zipfile.ZipFile(destination, "w") as outer_zf:
             outer_zf.writestr("customXml/item1.xml", custom_xml)
+            for part_name, part_bytes in (extra_parts or {}).items():
+                outer_zf.writestr(part_name, part_bytes)
             outer_zf.writestr("[Content_Types].xml", b"<Types/>")
 
     def test_find_power_query_files_end_to_end(self):
@@ -216,6 +222,62 @@ in
             self.assertEqual(query_dict["Param1"], '"abc"')
             self.assertIn("Total Revenue", query_dict)
             self.assertEqual(query_dict["Total Revenue"], "5000")
+
+    def test_unrelated_customxml_parts_do_not_warn(self):
+        pivot_part = (
+            b"<pivot xmlns='http://gemini/pivotcustomization/TableXML  2_aeb2'>"
+            b"<cacheFields/></pivot>"
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            excel_path = Path(tmp_dir) / "PivotWorkbook.xlsx"
+            self._create_dummy_excel(
+                excel_path,
+                extra_parts={
+                    "customXml/item2.xml": pivot_part,
+                    "customXml/item3.xml": pivot_part,
+                },
+            )
+
+            with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+                queries = find_power_query_files(excel_path)
+
+            self.assertEqual(len(queries), 2)
+            self.assertEqual(mock_stderr.getvalue(), "")
+
+    def test_data_mashup_recovered_from_unparsable_part(self):
+        inner_zip_buf = BytesIO()
+        with zipfile.ZipFile(inner_zip_buf, "w") as inner_zf:
+            inner_zf.writestr(
+                "Formulas/Section1.m",
+                "section Section1;\nshared Recovered = 7;".encode("utf-8-sig"),
+            )
+        inner_zip_bytes = inner_zip_buf.getvalue()
+        mashup_blob = (
+            len(inner_zip_bytes).to_bytes(4, "little")
+            + inner_zip_bytes
+            + b"permissions_or_metadata"
+        )
+        mashup_b64 = base64.b64encode(mashup_blob)
+
+        # The invalid namespace URI forces the strict parser to fail while the
+        # DataMashup payload itself stays intact.
+        broken_xml = (
+            b"<root xmlns:d='http://schemas.microsoft.com/DataMashup' "
+            b"xmlns:x='http://example.com/bad namespace'>"
+            b"<d:DataMashup>" + mashup_b64 + b"</d:DataMashup></root>"
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            excel_path = Path(tmp_dir) / "BrokenNamespace.xlsx"
+            with zipfile.ZipFile(excel_path, "w") as outer_zf:
+                outer_zf.writestr("customXml/item1.xml", broken_xml)
+                outer_zf.writestr("[Content_Types].xml", b"<Types/>")
+
+            with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+                queries = find_power_query_files(excel_path)
+
+            self.assertEqual(queries, [("Recovered", "7")])
+            self.assertEqual(mock_stderr.getvalue(), "")
 
     def test_ask_confirmation(self):
         with patch("builtins.input", return_value="y"):

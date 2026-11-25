@@ -32,6 +32,11 @@ except ImportError:
 SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm"}
 BINARY_WORKBOOK_EXTENSIONS = {".xlsb"}
 DATA_MASHUP_NAMESPACE = {"d": "http://schemas.microsoft.com/DataMashup"}
+DATA_MASHUP_MARKER = b"DataMashup"
+DATA_MASHUP_PATTERN = re.compile(
+    rb"<(?:[\w.-]+:)?DataMashup\b[^>]*>(.*?)</(?:[\w.-]+:)?DataMashup\s*>",
+    re.DOTALL,
+)
 WINDOWS_RESERVED_NAMES = {
     "CON",
     "PRN",
@@ -224,16 +229,34 @@ def _extract_mashup_package(decoded_content: bytes) -> bytes | None:
     return first_valid_zip
 
 
-def _extract_mashup_base64_from_xml(xml_bytes: bytes) -> str | None:
+def _extract_mashup_base64_by_regex(xml_bytes: bytes) -> str | None:
+    """Recover the DataMashup payload when a strict XML parser rejects the part.
+
+    Some workbooks store customXml parts whose namespace URIs contain spaces, which
+    makes lxml and ElementTree refuse to parse them even though the base64 payload
+    inside is intact.
+    """
+    match = DATA_MASHUP_PATTERN.search(xml_bytes)
+    if not match:
+        return None
+    return match.group(1).decode("utf-8", "ignore").strip() or None
+
+
+def _extract_mashup_base64_from_xml(xml_bytes: bytes, part_name: str) -> str | None:
     """Parse XML and extract the DataMashup base64 content text.
 
-    Returns None if the XML cannot be parsed or contains no DataMashup element.
+    Returns None if no DataMashup payload can be recovered from the part.
     """
     try:
         root = etree.fromstring(xml_bytes)  # nosec B314
     except XML_PARSE_ERRORS as error:
-        print(f"Warning: Failed to parse DataMashup XML: {error}", file=sys.stderr)
-        return None
+        fallback = _extract_mashup_base64_by_regex(xml_bytes)
+        if fallback is None:
+            print(
+                f"Warning: skipping unparsable customXml part '{part_name}': {error}",
+                file=sys.stderr,
+            )
+        return fallback
 
     if HAS_LXML:
         elements = root.xpath(  # type: ignore
@@ -280,9 +303,17 @@ def find_power_query_files(excel_path: str | Path) -> list[tuple[str, str]]:
                     continue
 
                 with workbook.open(file_info) as xml_file:
-                    mashup_b64 = _extract_mashup_base64_from_xml(xml_file.read())
-                    if not mashup_b64:
-                        continue
+                    xml_bytes = xml_file.read()
+
+                # Only parts that mention DataMashup are worth parsing: unrelated
+                # customXml items (pivot caches, for example) frequently carry
+                # invalid namespace URIs that strict parsers reject.
+                if DATA_MASHUP_MARKER not in xml_bytes:
+                    continue
+
+                mashup_b64 = _extract_mashup_base64_from_xml(xml_bytes, file_name)
+                if not mashup_b64:
+                    continue
 
                 try:
                     decoded_content = base64.b64decode(mashup_b64)
