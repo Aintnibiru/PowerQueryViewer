@@ -1,4 +1,6 @@
 import base64
+import importlib.machinery
+import importlib.util
 import tempfile
 import unittest
 import zipfile
@@ -6,15 +8,22 @@ from io import BytesIO, StringIO
 from pathlib import Path
 from unittest.mock import patch
 
-from power_query_extractor import (
-    _extract_mashup_package,
-    _split_query_definitions,
-    ask_confirmation,
-    find_power_query_files,
-    main,
-    sanitize_filename,
-    save_power_query_files,
+# Load the entry-point script by path with an explicit Python source loader
+_pq_path = Path(__file__).parent / "pq_extract.py"
+_loader = importlib.machinery.SourceFileLoader("pq_extract", str(_pq_path))
+_spec = importlib.util.spec_from_file_location(
+    "pq_extract", str(_pq_path), loader=_loader
 )
+pq_extract = importlib.util.module_from_spec(_spec)
+_loader.exec_module(pq_extract)
+
+_extract_mashup_package = pq_extract._extract_mashup_package
+_split_query_definitions = pq_extract._split_query_definitions
+ask_confirmation = pq_extract.ask_confirmation
+find_power_query_files = pq_extract.find_power_query_files
+main = pq_extract.main
+sanitize_filename = pq_extract.sanitize_filename
+save_power_query_files = pq_extract.save_power_query_files
 
 
 class TestPowerQueryExtractor(unittest.TestCase):
@@ -110,6 +119,28 @@ in
         self.assertEqual(sanitize_filename("CON"), "_CON")
         self.assertEqual(sanitize_filename("aux.pq"), "_aux.pq")
         self.assertEqual(sanitize_filename("NUL"), "_NUL")
+
+    def test_save_power_query_files_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir)
+            queries = [("Query1", "let x = 1 in x")]
+
+            # First save
+            saved = save_power_query_files(queries, out_dir)
+            self.assertEqual(len(saved), 1)
+            self.assertTrue((out_dir / "Query1.pq").exists())
+
+            # Second save without overwrite should raise
+            with self.assertRaises(FileExistsError):
+                save_power_query_files(queries, out_dir, overwrite=False)
+
+            # Second save with overwrite should succeed
+            saved = save_power_query_files(queries, out_dir, overwrite=True)
+            self.assertEqual(len(saved), 1)
+            self.assertEqual(
+                (out_dir / "Query1.pq").read_text(encoding="utf-8"),
+                "let x = 1 in x",
+            )
 
     def test_save_power_query_files_collision_handling(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -273,6 +304,12 @@ in
             bad_zip.write_text("not a real zip", encoding="utf-8")
             with self.assertRaises(ValueError):
                 find_power_query_files(bad_zip)
+
+    def test_version_flag(self):
+        with patch("sys.argv", ["script", "--version"]):
+            with self.assertRaises(SystemExit) as context:
+                main()
+            self.assertEqual(context.exception.code, 0)
 
 
 if __name__ == "__main__":

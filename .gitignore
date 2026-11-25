@@ -10,3 +10,6 @@ ENV/
 
 # Output directories
 *.pq
+
+# IDE / AI tooling caches
+.qoder/

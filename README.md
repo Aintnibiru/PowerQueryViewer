@@ -1,6 +1,6 @@
 # PowerQueryViewer
 
-The `power_query_extractor.py` script is a Python utility designed for data analysts, developers, and anyone involved in data transformation and analysis using Excel's Power Query feature. It automates the extraction and decoding of Power Query M code from Excel files (.xlsx, .xlsm, .xlsb), bypassing the need to manually open and navigate through Excel documents.
+The `pq_extract.py` script is a Python utility designed for data analysts, developers, and anyone involved in data transformation and analysis using Excel's Power Query feature. It automates the extraction and decoding of Power Query M code from Excel files (.xlsx, .xlsm, .xlsb), bypassing the need to manually open and navigate through Excel documents.
 
 ## Features
 
@@ -37,7 +37,7 @@ Python 3.10 or higher.
 Run the script without arguments to open a file selection dialog:
 
 ```powershell
-python power_query_extractor.py
+python pq_extract.py
 ```
 
 ### Command-Line (CLI) Mode
@@ -45,25 +45,37 @@ python power_query_extractor.py
 Pass the Excel file directly:
 
 ```powershell
-python power_query_extractor.py "path/to/workbook.xlsx"
+python pq_extract.py "path/to/workbook.xlsx"
 ```
 
 Preview queries without extracting (`--list`):
 
 ```powershell
-python power_query_extractor.py "path/to/workbook.xlsx" --list
+python pq_extract.py "path/to/workbook.xlsx" --list
 ```
 
 Specify a custom output directory:
 
 ```powershell
-python power_query_extractor.py "path/to/workbook.xlsx" -o "path/to/output_dir"
+python pq_extract.py "path/to/workbook.xlsx" -o "path/to/output_dir"
 ```
 
 Extract immediately without confirmation prompt (`-y` / `--yes`):
 
 ```powershell
-python power_query_extractor.py "path/to/workbook.xlsx" -y
+python pq_extract.py "path/to/workbook.xlsx" -y
+```
+
+Overwrite existing output files (`--overwrite`):
+
+```powershell
+python pq_extract.py "path/to/workbook.xlsx" -y --overwrite
+```
+
+Show version (`-v` / `--version`):
+
+```powershell
+python pq_extract.py --version
 ```
 
 ### Output

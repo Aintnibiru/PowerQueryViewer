@@ -7,6 +7,8 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
+__version__ = "1.1.0"
+
 # Support standard library xml.etree with optional lxml acceleration
 try:
     from lxml import etree
@@ -150,7 +152,7 @@ def _split_query_definitions(section_content: str) -> list[tuple[str, str]]:
         query_content = segment[eq_pos + 1 :].strip()
 
         # Extract query identifier right before '='
-        # Identifiers can be #"quoted identifier" or standard identifier
+        # Identifiers can be #\"quoted identifier\" or standard identifier
         match = re.search(r'(#"(?:[^"]|"")*"|[^\W\d_]\w*)\s*$', header)
         if not match:
             continue
@@ -222,10 +224,14 @@ def _extract_mashup_package(decoded_content: bytes) -> bytes | None:
 
 
 def _extract_mashup_base64_from_xml(xml_bytes: bytes) -> str | None:
-    """Parse XML and extract the DataMashup base64 content text."""
+    """Parse XML and extract the DataMashup base64 content text.
+
+    Returns None if the XML cannot be parsed or contains no DataMashup element.
+    """
     try:
         root = etree.fromstring(xml_bytes)  # nosec B314
-    except XML_PARSE_ERRORS:
+    except XML_PARSE_ERRORS as error:
+        print(f"Warning: Failed to parse DataMashup XML: {error}", file=sys.stderr)
         return None
 
     if HAS_LXML:
@@ -321,7 +327,7 @@ def select_excel_file() -> str:
         print(
             f"Error opening graphical file dialog: {error}\n"
             "Please specify the Excel file path directly as a command-line argument:\n"
-            "  python power_query_extractor.py <path_to_excel_file>",
+            "  python pq_extract.py <path_to_excel_file>",
             file=sys.stderr,
         )
         return ""
@@ -339,11 +345,14 @@ def sanitize_filename(name: str, index: int = 1) -> str:
 
 
 def save_power_query_files(
-    queries: list[tuple[str, str]], output_dir: str | Path
+    queries: list[tuple[str, str]],
+    output_dir: str | Path,
+    overwrite: bool = False,
 ) -> list[Path]:
     """Save extracted queries using sanitized names as .pq filenames.
 
     Automatically handles duplicate or colliding query filenames without data loss.
+    If overwrite is True, existing files are silently overwritten.
     """
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -362,6 +371,12 @@ def save_power_query_files(
         used_names.add(candidate_name.casefold())
 
         output_path = destination / f"{candidate_name}.pq"
+
+        if output_path.exists() and not overwrite:
+            raise FileExistsError(
+                f"File '{output_path}' already exists. Use --overwrite to replace."
+            )
+
         output_path.write_text(query_content, encoding="utf-8")
         saved_files.append(output_path)
 
@@ -413,6 +428,24 @@ def main() -> None:
         action="store_true",
         help="Skip confirmation prompt and extract immediately.",
     )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="version",
+        version=f"%(prog)s {__version__}",
+        help="Show version and exit.",
+    )
+    parser.add_argument(
+        "-q",
+        "--quiet",
+        action="store_true",
+        help="Suppress informational output (errors still shown).",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing .pq files without prompting.",
+    )
 
     args = parser.parse_args()
 
@@ -462,7 +495,11 @@ def main() -> None:
             return
 
     print("\nMengekstrak query...")
-    saved_files = save_power_query_files(queries, output_dir)
+    try:
+        saved_files = save_power_query_files(queries, output_dir, overwrite=args.overwrite)
+    except FileExistsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
 
     print(f"Jumlah file tersimpan: {len(saved_files)}")
     print("File hasil ekstrak:")
