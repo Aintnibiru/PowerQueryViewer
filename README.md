@@ -11,7 +11,7 @@ The `pq_extract.py` script is a Python utility designed for data analysts, devel
 - **CLI & GUI Modes**: Run with a graphical file picker dialog or pass file paths directly via command-line arguments for automated pipelines.
 - **Zero-Dependency Ready**: Operates with Python's standard library out of the box, with optional `lxml` support for faster XML processing.
 - **Safe Output Sanitization**: Cross-platform file naming with automatic collision resolution to avoid overwriting queries with similar or colliding names.
-- **Robust Part Scanning**: Only `customXml` parts that reference `DataMashup` are parsed, and parts whose namespace URIs a strict parser rejects fall back to a text scan instead of emitting warnings.
+- **Robust Part Scanning**: Only `customXml` parts that reference `DataMashup` are parsed, in any text encoding (Excel writes some parts as UTF-16), `DataMashup` is found whether it is the document root or a nested element, and parts whose namespace URIs a strict parser rejects fall back to a text scan instead of emitting warnings.
 
 ## Getting Started
 

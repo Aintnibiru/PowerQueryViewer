@@ -13,7 +13,6 @@ __version__ = "1.1.0"
 try:
     from lxml import etree
 
-    HAS_LXML = True
     XML_PARSE_ERRORS: tuple[type[BaseException], ...] = (
         etree.XMLSyntaxError,
         ValueError,
@@ -22,7 +21,6 @@ try:
 except ImportError:
     import xml.etree.ElementTree as etree  # nosec B405 # type: ignore
 
-    HAS_LXML = False
     XML_PARSE_ERRORS = (
         etree.ParseError,
         ValueError,
@@ -31,7 +29,6 @@ except ImportError:
 
 SUPPORTED_EXTENSIONS = {".xlsx", ".xlsm"}
 BINARY_WORKBOOK_EXTENSIONS = {".xlsb"}
-DATA_MASHUP_NAMESPACE = {"d": "http://schemas.microsoft.com/DataMashup"}
 DATA_MASHUP_MARKER = b"DataMashup"
 DATA_MASHUP_PATTERN = re.compile(
     rb"<(?:[\w.-]+:)?DataMashup\b[^>]*>(.*?)</(?:[\w.-]+:)?DataMashup\s*>",
@@ -229,14 +226,29 @@ def _extract_mashup_package(decoded_content: bytes) -> bytes | None:
     return first_valid_zip
 
 
+def _mentions_data_mashup(xml_bytes: bytes) -> bool:
+    """Report whether a part references DataMashup in any of its encodings.
+
+    Excel stores some customXml parts as UTF-16 with a byte-order mark, where each
+    ASCII character is followed by a NUL byte, so a plain byte search alone would
+    skip the part that actually carries the payload.
+    """
+    if DATA_MASHUP_MARKER in xml_bytes:
+        return True
+    return DATA_MASHUP_MARKER in xml_bytes.replace(b"\x00", b"")
+
+
 def _extract_mashup_base64_by_regex(xml_bytes: bytes) -> str | None:
     """Recover the DataMashup payload when a strict XML parser rejects the part.
 
     Some workbooks store customXml parts whose namespace URIs contain spaces, which
     makes lxml and ElementTree refuse to parse them even though the base64 payload
-    inside is intact.
+    inside is intact. UTF-16 parts are flattened first for the same reason.
     """
-    match = DATA_MASHUP_PATTERN.search(xml_bytes)
+    haystack = xml_bytes if DATA_MASHUP_MARKER in xml_bytes else xml_bytes.replace(
+        b"\x00", b""
+    )
+    match = DATA_MASHUP_PATTERN.search(haystack)
     if not match:
         return None
     return match.group(1).decode("utf-8", "ignore").strip() or None
@@ -251,24 +263,24 @@ def _extract_mashup_base64_from_xml(xml_bytes: bytes, part_name: str) -> str | N
         root = etree.fromstring(xml_bytes)  # nosec B314
     except XML_PARSE_ERRORS as error:
         fallback = _extract_mashup_base64_by_regex(xml_bytes)
-        if fallback is None:
+        if fallback is None and _mentions_data_mashup(xml_bytes):
             print(
                 f"Warning: skipping unparsable customXml part '{part_name}': {error}",
                 file=sys.stderr,
             )
         return fallback
 
-    if HAS_LXML:
-        elements = root.xpath(  # type: ignore
-            "//d:DataMashup", namespaces=DATA_MASHUP_NAMESPACE
-        )
-    else:
-        elements = root.findall(  # type: ignore
-            ".//d:DataMashup", namespaces=DATA_MASHUP_NAMESPACE
-        )
-
-    if elements and elements[0].text:
-        return elements[0].text.strip()
+    # Excel stores DataMashup as the document root of the customXml item part, so the
+    # search has to include the root itself: "//DataMashup" and ".//d:DataMashup" both
+    # miss it. Matching on the local name keeps lxml and ElementTree on one code path.
+    for element in root.iter():
+        tag = element.tag
+        if (
+            isinstance(tag, str)
+            and tag.rpartition("}")[2] == "DataMashup"
+            and element.text
+        ):
+            return element.text.strip()
     return None
 
 
@@ -308,7 +320,7 @@ def find_power_query_files(excel_path: str | Path) -> list[tuple[str, str]]:
                 # Only parts that mention DataMashup are worth parsing: unrelated
                 # customXml items (pivot caches, for example) frequently carry
                 # invalid namespace URIs that strict parsers reject.
-                if DATA_MASHUP_MARKER not in xml_bytes:
+                if not _mentions_data_mashup(xml_bytes):
                     continue
 
                 mashup_b64 = _extract_mashup_base64_from_xml(xml_bytes, file_name)

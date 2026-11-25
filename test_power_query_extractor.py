@@ -180,6 +180,7 @@ in
         self,
         destination: Path,
         extra_parts: dict[str, bytes] | None = None,
+        root_element: bool = False,
     ) -> None:
         inner_zip_buf = BytesIO()
         with zipfile.ZipFile(inner_zip_buf, "w") as inner_zf:
@@ -198,11 +199,18 @@ in
         )
         mashup_b64 = base64.b64encode(mashup_blob).decode("ascii")
 
-        custom_xml = (
-            f'<root xmlns:d="http://schemas.microsoft.com/DataMashup">'
-            f"<d:DataMashup>{mashup_b64}</d:DataMashup>"
-            f"</root>"
-        ).encode()
+        if root_element:
+            # Layout produced by Excel: DataMashup is the document root element.
+            custom_xml = (
+                f'<DataMashup xmlns="http://schemas.microsoft.com/DataMashup">'
+                f"{mashup_b64}</DataMashup>"
+            ).encode()
+        else:
+            custom_xml = (
+                f'<root xmlns:d="http://schemas.microsoft.com/DataMashup">'
+                f"<d:DataMashup>{mashup_b64}</d:DataMashup>"
+                f"</root>"
+            ).encode()
 
         with zipfile.ZipFile(destination, "w") as outer_zf:
             outer_zf.writestr("customXml/item1.xml", custom_xml)
@@ -222,6 +230,15 @@ in
             self.assertEqual(query_dict["Param1"], '"abc"')
             self.assertIn("Total Revenue", query_dict)
             self.assertEqual(query_dict["Total Revenue"], "5000")
+
+    def test_data_mashup_as_root_element_is_found(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            excel_path = Path(tmp_dir) / "RealLayout.xlsx"
+            self._create_dummy_excel(excel_path, root_element=True)
+
+            queries = find_power_query_files(excel_path)
+            self.assertEqual(len(queries), 2)
+            self.assertEqual(dict(queries)["Param1"], '"abc"')
 
     def test_unrelated_customxml_parts_do_not_warn(self):
         pivot_part = (
@@ -277,6 +294,48 @@ in
                 queries = find_power_query_files(excel_path)
 
             self.assertEqual(queries, [("Recovered", "7")])
+            self.assertEqual(mock_stderr.getvalue(), "")
+
+    def test_utf16_encoded_mashup_part_is_found(self):
+        inner_zip_buf = BytesIO()
+        with zipfile.ZipFile(inner_zip_buf, "w") as inner_zf:
+            inner_zf.writestr(
+                "Formulas/Section1.m",
+                "section Section1;\nshared Utf16Query = 11;",
+            )
+        inner_zip_bytes = inner_zip_buf.getvalue()
+        mashup_blob = (
+            len(inner_zip_bytes).to_bytes(4, "little")
+            + inner_zip_bytes
+            + b"permissions_or_metadata"
+        )
+        mashup_b64 = base64.b64encode(mashup_blob).decode("ascii")
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            excel_path = Path(tmp_dir) / "Utf16Workbook.xlsx"
+            # Excel writes some customXml items as UTF-16 with a byte-order mark,
+            # which interleaves NUL bytes between every character of the payload.
+            mashup_xml = (
+                '<?xml version="1.0" encoding="UTF-16"?>'
+                '<root xmlns:d="http://schemas.microsoft.com/DataMashup">'
+                f"<d:DataMashup>{mashup_b64}</d:DataMashup>"
+                "</root>"
+            ).encode("utf-16")
+            pivot_xml = (
+                '<?xml version="1.0" encoding="UTF-16"?>'
+                "<pivot xmlns='http://gemini/pivotcustomization/TableXML  2_aeb2'>"
+                "<cacheFields/></pivot>"
+            ).encode("utf-16")
+
+            with zipfile.ZipFile(excel_path, "w") as outer_zf:
+                outer_zf.writestr("customXml/item34.xml", mashup_xml)
+                outer_zf.writestr("customXml/item29.xml", pivot_xml)
+                outer_zf.writestr("[Content_Types].xml", b"<Types/>")
+
+            with patch("sys.stderr", new_callable=StringIO) as mock_stderr:
+                queries = find_power_query_files(excel_path)
+
+            self.assertEqual(queries, [("Utf16Query", "11")])
             self.assertEqual(mock_stderr.getvalue(), "")
 
     def test_ask_confirmation(self):
